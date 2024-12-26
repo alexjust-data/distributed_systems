@@ -7,6 +7,17 @@ Welcome to Alpine!
 sd-GCDA:~# 
 ```
 
+- [Computación de Alto Rendimiento (HPC)](#computación-de-alto-rendimiento-hpc)
+  - [Práctica](#práctica)
+    - [Objetivos específicos de la Práctica](#objetivos-específicos-de-la-práctica)
+  - [Descripción del código secuencial: Tormenta de partículas](#descripción-del-código-secuencial-tormenta-de-partículas)
+  - [Ejercicios](#ejercicios)
+    - [Descripción de las carpetas](#descripción-de-las-carpetas)
+    - [Ejercicio 1: Objetivo paralelización utilizando mpi4py (MPI)](#ejercicio-1-objetivo-paralelización-utilizando-mpi4py-mpi)
+    - [Ejercicio 2: Objetivo paralelización utilizando Numba(OpenMP)](#ejercicio-2-objetivo-paralelización-utilizando-numbaopenmp)
+  - [Ejercicio 3: Multiplicación de Matrices con MPI (mpi4py)](#ejercicio-3-multiplicación-de-matrices-con-mpi-mpi4py)
+- [Bibliografía](#bibliografía)
+
 
 ## Computación de Alto Rendimiento (HPC)
 
