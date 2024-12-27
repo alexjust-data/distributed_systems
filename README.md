@@ -13,8 +13,8 @@ sd-GCDA:~#
   - [Descripción del código secuencial: Tormenta de partículas](#descripción-del-código-secuencial-tormenta-de-partículas)
   - [Ejercicios](#ejercicios)
     - [Descripción de las carpetas](#descripción-de-las-carpetas)
-    - [Ejercicio 1: Objetivo paralelización utilizando mpi4py (MPI)](#ejercicio-1-objetivo-paralelización-utilizando-mpi4py-mpi)
-    - [Ejercicio 2: Objetivo paralelización utilizando Numba(OpenMP)](#ejercicio-2-objetivo-paralelización-utilizando-numbaopenmp)
+  - [Ejercicio 1: Objetivo paralelización utilizando mpi4py (MPI)](#ejercicio-1-objetivo-paralelización-utilizando-mpi4py-mpi)
+  - [Ejercicio 2: Objetivo paralelización utilizando Numba(OpenMP)](#ejercicio-2-objetivo-paralelización-utilizando-numbaopenmp)
   - [Ejercicio 3: Multiplicación de Matrices con MPI (mpi4py)](#ejercicio-3-multiplicación-de-matrices-con-mpi-mpi4py)
 - [Bibliografía](#bibliografía)
 
@@ -76,105 +76,114 @@ alpine:~# tree studentCode/
 
 studentCode/
 ├── MPI
+│   ├── EnergyStormMPIMain.py
+│   ├── StudentTemplate.py
+│   ├── __pycache__
+│   └── test_files
 ├── OMP
 ├── SerialEnergyStorm.py
 └── test_files
-    ├── README
-    ├── test_01_a35_p5_w3
-    ├── test_01_a35_p7_w2
-    ├── test_01_a35_p8_w1
-    ├── test_01_a35_p8_w4
-    ├── test_02_a30k_p20k_w1
-    ├── test_02_a30k_p20k_w2
-    ├── test_02_a30k_p20k_w3
-    ├── test_02_a30k_p20k_w4
-    ├── test_02_a30k_p20k_w5
-    ├── test_02_a30k_p20k_w6
-    ├── test_03_a20_p4_w1
-    ├── test_04_a20_p4_w1
-    ├── test_05_a20_p4_w1
-    ├── test_06_a20_p4_w1
-    ├── test_07_a1M_p5k_w1
-    ├── test_07_a1M_p5k_w2
-    ├── test_07_a1M_p5k_w3
-    ├── test_07_a1M_p5k_w4
-    ├── test_08_a100M_p1_w1
-    ├── test_08_a100M_p1_w2
-    ├── test_08_a100M_p1_w3
-    └── test_09_a16-17_p3_w1
 ```
 
-```sh
-alpine:~/studentCode# cat SerialEnergyStorm.py
-```
+`EnergyStormMPIMain.py` :
 
 ```py
-import time
-import numpy as np
+from mpi4py import MPI
 import sys
+import numpy as np
 from math import sqrt
-import math
-from decimal import Decimal, getcontext
+import time
+import StudentTemplate
+"""
+/*
+ * Simplified simulation of high-energy particle storms
+ *
+ * Parallel computing (Degree in Computer Engineering)
+ * 
+ *
+ * Version: 2.0
+ *
+ * Code prepared to be used with the Tablon on-line judge.
+ * The current Parallel Computing course includes contests using:
+ * OpenMP, MPI, and CUDA.
+ *
+ * (c) 2018 Arturo Gonzalez-Escribano, Eduardo Rodriguez-Gutiez
+ * Grupo Trasgo, Universidad de Valladolid (Spain)
+ *
+ * This work is licensed under a Creative Commons Attribution-ShareAlike 4.0 International License.
+ * https://creativecommons.org/licenses/by-sa/4.0/
+" */
+"""
+THRESHOLD = 0.001
 
-# Función para obtener el tiempo (timestap)
 def cp_wtime():
+    """ Function to get wall time """
     return time.time()
 
-
-# Estructura para almacenar datos de una tormenta de partículas
+# Structure used to store data for one storm of particles 
 class Storm:
     def __init__(self, size, posval):
-        self.size = size
-        self.posval = posval
-
-# Función para actualizar una única posición de la capa
-def update(layer, layer_size, k, pos, energy, THRESHOLD):
-    distance = float(abs(pos - k))
-    distance += 1.0
-    attenuation = sqrt(distance)
-    energy_k = float(energy) / float(layer_size) / attenuation
-
-    energy_k = round(energy_k, 6)
-    
-    if energy_k >= THRESHOLD / layer_size or energy_k <= -THRESHOLD / layer_size:
-        layer[k] += energy_k
+        self.size = size #Number of particles
+        self.posval = np.array(posval, dtype=int) #Positions and values
 
 
-# Función para leer datos de tormentas de partículas desde un archivo
-def read_storm_file(fname):
-    with open(fname, 'r') as f:
-        size = int(f.readline().strip())
-        posval = []
-        for line in f:
-            parts = list(map(int, line.strip().split()))
-            posval.extend(parts)
+# Function: Read data of particle storms from a file
+def read_storm_file(filename):
+    posval = []
+    try:
+        with open(filename, 'r') as file:
+            size = int(file.readline().strip())
+            for line in file:
+                parts = list(map(int, line.strip().split()))
+                posval.extend(parts)
+    except Exception as e:
+        print(f"Error opening or reading storm file: {filename}, {str(e)}")
+        MPI.COMM_WORLD.Abort(1)
     return Storm(size, posval)
 
 
-# Función de depuración para imprimir el estado de la capa
+# ANCILLARY FUNCTIONS: These are not called from the code section which is measured, leave untouched 
+# DEBUG function: Prints the layer status 
 def debug_print(layer_size, layer, positions, maximum, num_storms):
+    """ Only print for array size up to 35 (change it for bigger sizes if needed) """
     if layer_size <= 35:
+        # Traverse layer 
         for k in range(layer_size):
+            #Print the energy value of the current cell 
             print(f"{layer[k]:10.4f} |", end="")
-            ticks = int(60 * layer[k] / maximum[num_storms-1])
-            for i in range(ticks - 1):
-                print("o", end="")
+
+            # Compute the number of characters. 
+            # This number is normalized, the maximum level is depicted with 60 characters 
+            ticks = int(60 * layer[k] / np.max(maximum))
+
+            # Print all characters except the last one 
+            print("o" * (ticks - 1), end="")
+
+            # If the cell is a local maximum print a special trailing character
             if k > 0 and k < layer_size - 1 and layer[k] > layer[k - 1] and layer[k] > layer[k + 1]:
                 print("x", end="")
             else:
                 print("o", end="")
+
+            # If the cell is the maximum of any storm, print the storm mark
             for i in range(num_storms):
                 if positions[i] == k:
                     print(f" M{i}", end="")
+
+            # Line feed
             print()
 
+# MAIN PROGRAM
 
-def main(argv):
+def main():
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    size = comm.Get_size()
 
     # 1.1. Read arguments
     if len(sys.argv) < 4:
-    
-        print("Usage:", sys.argv[0], "<size> <seed> <storm_1_file> [ <storm_i_file> ] ...")
+        if rank == 0:
+            print("Usage:", sys.argv[0], "<size> <seed> <storm_1_file> [ <storm_i_file> ] ...")
         sys.exit()
 
     # 1.2. Read storms information
@@ -187,54 +196,113 @@ def main(argv):
     np.random.seed(seed)
     random_factor = np.random.uniform(1000, 10000000) 
     THRESHOLD = 0.01 * random_factor  # Adjust THRESHOLD
-    
-    maximum = np.zeros(num_storms)
-    positions = np.zeros(num_storms, dtype=int)
-    storms_size = np.array([storm.size for storm in storms])
-    storms_posval = np.array([storm.posval for storm in storms]) 
-    lastLayer = np.array([])
-    # Medición del tiempo: inicio
-    ttotal = cp_wtime()
 
-    # Simulación de tormentas
+
+    # 1.3. Intialize maximum levels to zero
+    # 1.4. Allocate memory for the layer and initialize to zero
     layer = np.zeros(layer_size, dtype=float)
     layer_copy = np.zeros_like(layer)
+    maximum = np.zeros(num_storms, dtype=float)
+    positions = np.zeros(num_storms, dtype=int)
 
-    for i in range(num_storms):
-        for j in range(storms_size[i]):
-            energy = round(float(storms[i].posval[2 * j + 1]) * 1000.0, 6)
-            position = int(storms[i].posval[2 * j])
+    comm.Barrier()  # Synchronize before timing
 
-            for k in range(layer_size):
-                pass
-                update(layer, layer_size, k, position, energy, THRESHOLD)
+    # 2. Begin time measurement
+    start_time = cp_wtime()
 
-        layer_copy[:] = layer[:]
-        layer[1:-1] = (layer_copy[:-2] + layer_copy[1:-1] + layer_copy[2:]) / 3
+    maximum, positions, lastLayer= StudentTemplate.EnergyCore(layer_size, layer, layer_copy, num_storms,storms, maximum, positions,rank, size, comm, THRESHOLD)
+
+    # 4. End time measurement
+    end_time = cp_wtime()
+    total_time = end_time - start_time
+
+    energySumP = float(np.sum(lastLayer))
+    totalEnergySum = comm.reduce(energySumP, op=MPI.SUM, root=0)
+
+    # 5. Results output
+    if rank == 0:
+        # 5.1. Total computation time 
+        print("\nTime:", total_time)
+        # 5.2. Print the maximum levels
+        print("Result:", end="")
+        for i in range(num_storms):
+            print(f" {positions[i]} {maximum[i]:.2f}", end="")
+        print()
 
 
-        for k in range(1, layer_size - 1):
-            if layer[k] > layer[k - 1] and layer[k] > layer[k + 1]:
-                if layer[k] > maximum[i]:
-                    maximum[i] = layer[k]
-                    positions[i] = k
-        
-    # Medición del tiempo: finalización
-    ttotal = cp_wtime() - ttotal
-
-    lastLayer = layer
-    totalEnergySum = np.sum(lastLayer)
-    # Resultados
-    print("Total Energy Summary:", totalEnergySum)
-    print("\nTime:", ttotal)
-    print("Result:", end="")
-    for i in range(num_storms):
-        print(f" {positions[i]} {maximum[i]:.2f}", end="")
-    print()
-
+        # Optionally include debug print
+        # debug_print(layer_size, layer, positions, maximum, num_storms)
 
 if __name__ == "__main__":
-    main(sys.argv)
+    main()
+```
+
+En el codigo anterior se ejecuta `StudentTemplate`
+
+`StudentTemplate.py`:
+
+```py
+from mpi4py import MPI
+import sys
+import numpy as np
+from math import sqrt
+import time
+import math 
+
+
+
+# START: Do NOT optimize/parallelize the code of the program above this point 
+
+
+# THIS FUNCTION CAN BE MODIFIED 
+# Function to update a single position of the layer 
+def update(layer, layer_size, k, pos, energy, THRESHOLD):
+    distance = float(abs(pos - k))
+    distance += 1.0
+    attenuation = math.sqrt(float(distance))
+    energy_k = float(energy) / float(layer_size) / attenuation
+
+    
+    energy_k = round(energy_k, 6)
+
+    if energy_k >= THRESHOLD / layer_size or energy_k <= -THRESHOLD / layer_size:
+        layer[k] += energy_k
+
+def EnergyCore(layer_size, layer, layer_copy, num_storms,storms, maximum, positions,rank, size, comm, THRESHOLD):
+	
+
+	# 3. Storms simulation
+	
+	for i in range(num_storms):
+	    # 3.1. Add impacts energies to layer cells 
+	    # For each particle 
+	    for j in range(storms[i].size):
+	        # Get impact energy (expressed in thousandths)
+	        energy = round(float(storms[i].posval[2 * j + 1]) * 1000.0, 6)
+	        # Get impact position
+	        position = int(storms[i].posval[2 * j])
+	        # For each cell in the layer 
+	        for k in range(layer_size):
+	            # Update the energy value for the cell
+	            update(layer, layer_size, k, position, energy, THRESHOLD)
+
+	    # 3.2. Energy relaxation between storms 
+	    # 3.2.1. Copy values to the ancillary array
+	    layer_copy[:] = layer
+	    # 3.2.2. Update layer using the ancillary values.
+	    #         Skip updating the first and last positions 
+	    layer[1:-1] = (layer_copy[:-2] + layer_copy[1:-1] + layer_copy[2:]) / 3
+
+	    # 3.3. Locate the maximum value in the layer, and its position
+	    for k in range(1, layer_size - 1):
+	        # Check it only if it is a local maximum
+	        if layer[k] > layer[k-1] and layer[k] > layer[k+1] and layer[k] > maximum[i]:
+	            maximum[i] = layer[k]
+	            positions[i] = k
+
+    # END: Do NOT optimize/parallelize the code below this point
+	lastLayer= layer
+	return maximum, positions, lastLayer
 ```
 
 **Argumentos del programa**
@@ -348,7 +416,7 @@ En ambos ejercicios solo se podrá modificar el fichero “StudentTemplate.py”
 En la primera se muestra el tiempo de ejecución del bloque 2, sin incluir la lectura de datos ni la escritura en pantalla. En la segunda línea encontramos la posición con la máxima energía y el valor de esta para cada oleada de partículas.
 
 
-#### Ejercicio 1: Objetivo paralelización utilizando mpi4py (MPI)
+### Ejercicio 1: Objetivo paralelización utilizando mpi4py (MPI)
 
 En este ejercicio, se deberá paralelizar el código secuencial que simula el bombardeo de partículas de energía utilizando MPI (Message Passing Interface). El objetivo es dividir la carga de trabajo entre múltiples procesos, donde cada proceso será responsable de calcular la energía acumulada en una sección de la superficie. Este enfoque permitirá que el programa escale eficientemente en un entorno de memoria distribuida, optimizando el tiempo de ejecución para grandes volúmenes de datos.
 
@@ -373,9 +441,9 @@ alpine:~/studentCode# tree -P '*.py'
 └── test_files
 ```
 
-“EnergyStormMPIMain.py”: Este fichero contiene la función main() para cargar los datos e imprimir los resultados.
+[EnergyStormMPIMain.py](/studentCode/MPI/EnergyStormMPIMain.py): Este fichero contiene la función main() para cargar los datos e imprimir los resultados.
 
-“StudentTemplate.py”: Este fichero es la plantilla que se os proporciona, con una estructura de código inicial para comenzar a implementar la paralelización utilizando MPI. Este es el fichero sobre el que deberán trabajar para modificar y completar la paralelización.
+[StudentTemplate.py](/studentCode/MPI/StudentTemplate.py): Este fichero es la plantilla que se os proporciona, con una estructura de código inicial para comenzar a implementar la paralelización utilizando MPI. Este es el fichero sobre el que deberán trabajar para modificar y completar la paralelización.
 
 **Cómo ejecutar el programa:**
 
@@ -401,8 +469,93 @@ Result: 9280 885923.65 3686 1748313.47 9254 2579631.72 9203 3426454.41
 
 Como podemos observar, el tiempo de ejecución ha disminuido como resultado de la distribución del trabajo sobre los 4 procesadores manteniendo el mismo resultado que la versión serie.
 
+**`PROPUESTA Y RESULTADOS`**
 
-#### Ejercicio 2: Objetivo paralelización utilizando Numba(OpenMP)
+```py
+def EnergyCore(layer_size, layer, layer_copy, num_storms, storms, maximum, positions, rank, size, comm, THRESHOLD):
+    # Calculate chunk size for each process
+    chunk_size = layer_size // size
+    start = rank * chunk_size
+    end = start + chunk_size if rank != size - 1 else layer_size  # Last process takes the remainder
+
+    # Allocate local buffers for each process
+    local_layer = np.zeros(chunk_size, dtype=float)
+    local_layer_copy = np.zeros_like(local_layer)
+
+    # 3. Storms simulation
+    for i in range(num_storms):
+        # 3.1. Add impacts energies to local cells (parallelized)
+        for j in range(storms[i].size):
+            energy = round(float(storms[i].posval[2 * j + 1]) * 1000.0, 6)
+            position = int(storms[i].posval[2 * j])
+
+            # Update only if the particle impacts this process's range
+            if start <= position < end:
+                local_position = position - start
+                for k in range(chunk_size):
+                    update(local_layer, layer_size, k, local_position + start, energy, THRESHOLD)
+
+        # Synchronize all processes (global layer)
+        comm.Allgather(local_layer, layer)
+
+        # 3.2. Relax energy between storms
+        local_layer_copy[:] = local_layer
+
+        # Send/receive boundary data with neighbors
+        if rank != 0:  # Send left boundary to the previous rank
+            left_boundary_send = np.array([local_layer[0]], dtype=float)
+            left_boundary_recv = np.zeros(1, dtype=float)
+            comm.Sendrecv(sendbuf=left_boundary_send, dest=rank - 1,
+                          recvbuf=left_boundary_recv, source=rank - 1)
+            local_layer_copy[0] = left_boundary_recv[0]
+
+        if rank != size - 1:  # Send right boundary to the next rank
+            right_boundary_send = np.array([local_layer[-1]], dtype=float)
+            right_boundary_recv = np.zeros(1, dtype=float)
+            comm.Sendrecv(sendbuf=right_boundary_send, dest=rank + 1,
+                          recvbuf=right_boundary_recv, source=rank + 1)
+            local_layer_copy[-1] = right_boundary_recv[0]
+
+        # Perform relaxation on local chunk
+        for k in range(1, chunk_size - 1):
+            local_layer[k] = (local_layer_copy[k - 1] + local_layer_copy[k] + local_layer_copy[k + 1]) / 3
+
+        # 3.3. Locate the maximum value in the local layer
+        local_max = -float('inf')
+        local_pos = -1
+        for k in range(chunk_size):
+            if local_layer[k] > local_max:
+                local_max = local_layer[k]
+                local_pos = k + start
+
+        # Reduce maximum values and positions to the root process
+        global_max = comm.reduce(local_max, op=MPI.MAX, root=0)
+        global_pos = comm.reduce(local_pos, op=MPI.MAX, root=0)
+
+        if rank == 0:
+            maximum[i] = global_max
+            positions[i] = global_pos
+
+    # Collect the final layer
+    comm.Gather(local_layer, layer, root=0)
+
+    # END: Do NOT optimize/parallelize the code below this point
+    lastLayer = layer
+    return maximum, positions, lastLayer
+
+```
+
+```sh
+alpine:~/studentCode/MPI# mpirun -np 4 python3.9 -m mpi4py EnergyStormMPIMain.py 10000 687 test_files/test_07*
+
+Time: 0.446976900100708
+Result: 9999 119739.60 7501 176541.07 7501 291585.86 7501 379570.39
+```
+
+
+
+
+### Ejercicio 2: Objetivo paralelización utilizando Numba(OpenMP)
 
 En este ejercicio, deberán paralelizar el mismo código secuencial, pero esta vez utilizando OpenMP a través de la librería Numba en Python. OpenMP permitirá explotar el paralelismo en entornos de memoria compartida, dividiendo la carga de trabajo entre múltiples hilos dentro de un mismo proceso. Este enfoque permitirá optimizar el rendimiento del código en sistemas multicore, proporcionando una solución eficiente y rápida para la simulación del bombardeo de partículas de alta energía.
 
